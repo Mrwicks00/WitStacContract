@@ -29,7 +29,7 @@
 ;; Error codes
 (define-constant err-not-owner          (err u300))
 (define-constant err-not-authorized     (err u301))
-(define-constant err-insufficient-funds (err u302))
+
 
 ;; ============================================================
 ;; SIP-010 Required Functions

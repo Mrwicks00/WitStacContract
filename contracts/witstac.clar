@@ -14,11 +14,14 @@
 (define-constant contract-owner   tx-sender)
 (define-constant commitment-window u100) ;; blocks a commitment stays valid (~16 hrs on Stacks)
 
-;; Difficulty tier base rewards (WIT micro-units, 1 WIT = 1_000_000)
-(define-constant reward-easy   u500000)   ;; 0.5 WIT (difficulty 1)
-(define-constant reward-medium u1000000)  ;; 1.0 WIT (difficulty 2)
-(define-constant reward-hard   u2500000)  ;; 2.5 WIT (difficulty 3)
-(define-constant reward-expert u5000000)  ;; 5.0 WIT (difficulty 4)
+;; Default difficulty tier rewards (WIT micro-units, 1 WIT = 1_000_000)
+;; Easy=0.5 WIT, Medium=1 WIT, Hard=2.5 WIT, Expert=5 WIT
+;; These are used by get-difficulty-reward below.
+(define-constant reward-easy   u500000)
+(define-constant reward-medium u1000000)
+(define-constant reward-hard   u2500000)
+(define-constant reward-expert u5000000)
+
 
 ;; Error codes
 (define-constant err-not-owner            (err u200))
@@ -27,10 +30,7 @@
 (define-constant err-no-commitment        (err u203))
 (define-constant err-commitment-expired   (err u204))
 (define-constant err-hash-mismatch        (err u205))
-(define-constant err-insufficient-pool    (err u206))
 (define-constant err-invalid-difficulty   (err u207))
-(define-constant err-duplicate-question   (err u208))
-(define-constant err-invalid-answer-len   (err u209))
 (define-constant err-already-committed    (err u210))
 
 ;; ============================================================
@@ -99,8 +99,9 @@
 ;; Private Helper Functions
 ;; ============================================================
 
-;; Map difficulty (1 to 4) to base reward constant
-(define-private (get-base-reward-for-difficulty (difficulty uint))
+
+;; Map difficulty (1-4) to its default base reward
+(define-private (get-difficulty-reward (difficulty uint))
   (if (is-eq difficulty u1) reward-easy
     (if (is-eq difficulty u2) reward-medium
       (if (is-eq difficulty u3) reward-hard
@@ -199,7 +200,10 @@
   (begin
     (asserts! (is-eq tx-sender contract-owner) err-not-owner)
     (asserts! (and (>= difficulty u1) (<= difficulty u4)) err-invalid-difficulty)
-    (let ((new-id (+ (var-get question-count) u1)))
+    (let (
+      (new-id      (+ (var-get question-count) u1))
+      (final-reward (if (is-eq reward u0) (get-difficulty-reward difficulty) reward))
+    )
       (var-set question-count new-id)
       (map-set questions { question-id: new-id }
         {
@@ -207,7 +211,7 @@
           answer-hash: answer-hash,
           category:    category,
           difficulty:  difficulty,
-          reward:      reward,
+          reward:      final-reward,
           active:      true
         })
       (ok new-id))))
