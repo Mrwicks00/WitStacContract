@@ -26,7 +26,7 @@
 (define-constant token-decimals u6)
 (define-constant token-uri (some u"https://witstac.app/token/wit"))
 
-;; ---- Error codes ----
+;; Error codes
 (define-constant err-not-owner          (err u300))
 (define-constant err-not-authorized     (err u301))
 (define-constant err-insufficient-funds (err u302))
@@ -43,9 +43,9 @@
   (begin
     (asserts! (is-eq tx-sender sender) err-not-authorized)
     (try! (ft-transfer? wit-token amount sender recipient))
-    (match memo
-      m (print m)
-      true)
+    (if (is-some memo)
+      (print memo)
+      (print memo))
     (ok true)))
 
 (define-read-only (get-name)
@@ -67,10 +67,10 @@
   (ok token-uri))
 
 ;; ============================================================
-;; Mint / Burn (owner-only for minting; burn is self-serve)
+;; Mint / Burn
 ;; ============================================================
 
-;; Mint WIT tokens — only callable by the contract owner OR the witstac game contract
+;; Mint WIT tokens - only callable by the contract owner OR the witstac game contract
 (define-public (mint (amount uint) (recipient principal))
   (begin
     (asserts! (or (is-eq tx-sender contract-owner)

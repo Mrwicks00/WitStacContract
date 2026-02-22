@@ -1,6 +1,6 @@
 ;; title: WitStac
 ;; version: 1.0.0
-;; summary: On-chain trivia game on Stacks — answer questions, earn WIT tokens, climb the leaderboard.
+;; summary: On-chain trivia game on Stacks - answer questions, earn WIT tokens, climb the leaderboard.
 ;; description:
 ;;   WitStac is a fully on-chain trivia game built in Clarity.
 ;;   Players commit a SHA-256 hash of their answer, then reveal the plaintext.
@@ -8,19 +8,19 @@
 ;;   Streaks unlock multipliers. All history is permanently on-chain.
 
 ;; ============================================================
-;; Constants — Owner & Game Config
+;; Constants - Owner & Game Config
 ;; ============================================================
 
 (define-constant contract-owner   tx-sender)
 (define-constant commitment-window u100) ;; blocks a commitment stays valid (~16 hrs on Stacks)
 
-;; ---- Difficulty tier base rewards (WIT micro-units, 1 WIT = 1_000_000) ----
-(define-constant reward-easy   u500000)   ;; 0.5 WIT  → difficulty 1
-(define-constant reward-medium u1000000)  ;; 1.0 WIT  → difficulty 2
-(define-constant reward-hard   u2500000)  ;; 2.5 WIT  → difficulty 3
-(define-constant reward-expert u5000000)  ;; 5.0 WIT  → difficulty 4
+;; Difficulty tier base rewards (WIT micro-units, 1 WIT = 1_000_000)
+(define-constant reward-easy   u500000)   ;; 0.5 WIT (difficulty 1)
+(define-constant reward-medium u1000000)  ;; 1.0 WIT (difficulty 2)
+(define-constant reward-hard   u2500000)  ;; 2.5 WIT (difficulty 3)
+(define-constant reward-expert u5000000)  ;; 5.0 WIT (difficulty 4)
 
-;; ---- Error codes ----
+;; Error codes
 (define-constant err-not-owner            (err u200))
 (define-constant err-question-not-found   (err u201))
 (define-constant err-question-inactive    (err u202))
@@ -37,14 +37,14 @@
 ;; Data Variables
 ;; ============================================================
 
-(define-data-var question-count     uint u0)
+(define-data-var question-count      uint u0)
 (define-data-var reward-pool-balance uint u0)
 
 ;; ============================================================
 ;; Data Maps
 ;; ============================================================
 
-;; --------------- Questions ---------------
+;; Questions map
 (define-map questions
   { question-id: uint }
   {
@@ -56,7 +56,7 @@
     active:      bool
   })
 
-;; --------------- Attempts per player per question ---------------
+;; Attempts per player per question
 (define-map attempts
   { player: principal, question-id: uint }
   {
@@ -65,7 +65,7 @@
     last-attempt-block: uint
   })
 
-;; --------------- Commitments ---------------
+;; Commitments: stores hashed answer before reveal
 (define-map commitments
   { player: principal, question-id: uint }
   {
@@ -73,7 +73,7 @@
     block-height: uint
   })
 
-;; --------------- Player Stats ---------------
+;; Player global stats
 (define-map player-stats
   { player: principal }
   {
@@ -83,7 +83,7 @@
     current-streak: uint
   })
 
-;; --------------- Leaderboard ---------------
+;; Leaderboard
 (define-map leaderboard
   { player: principal }
   {
@@ -99,7 +99,7 @@
 ;; Private Helper Functions
 ;; ============================================================
 
-;; Map difficulty (1–4) to base reward constant
+;; Map difficulty (1 to 4) to base reward constant
 (define-private (get-base-reward-for-difficulty (difficulty uint))
   (if (is-eq difficulty u1) reward-easy
     (if (is-eq difficulty u2) reward-medium
@@ -107,23 +107,29 @@
         reward-expert))))
 
 ;; Streak multiplier in basis points (10000 = 1.0x, 12500 = 1.25x, etc.)
+;;   streak 0-2:  1x    (10000 bp)
+;;   streak 3-4:  1.25x (12500 bp)
+;;   streak 5-9:  1.5x  (15000 bp)
+;;   streak 10-19: 2x   (20000 bp)
+;;   streak 20+:  3x    (30000 bp)
 (define-private (get-streak-multiplier (streak uint))
-  (if (< streak u3)   u10000   ;; streak 0–2  → 1x
-    (if (< streak u5)  u12500  ;; streak 3–4  → 1.25x
-      (if (< streak u10) u15000 ;; streak 5–9  → 1.5x
-        (if (< streak u20) u20000 ;; streak 10–19 → 2x
-          u30000)))))              ;; streak 20+   → 3x
+  (if (< streak u3)   u10000
+    (if (< streak u5)  u12500
+      (if (< streak u10) u15000
+        (if (< streak u20) u20000
+          u30000)))))
 
-;; Apply multiplier: reward * basisPoints / 10000
+;; Apply multiplier: reward * basis-points / 10000
 (define-private (apply-multiplier (reward uint) (basis-points uint))
   (/ (* reward basis-points) u10000))
 
 ;; Score points for a correct answer: base-reward / attempt-number
+;; First attempt = full points; later attempts = fewer points
 (define-private (calc-points (base-reward uint) (attempt-num uint))
   (if (is-eq attempt-num u0) base-reward
     (/ base-reward attempt-num)))
 
-;; Ensure a player-stats record exists (initialise with zeros if missing)
+;; Ensure a player-stats record exists; initialise with zeros if missing
 (define-private (ensure-player-stats (player principal))
   (if (is-none (map-get? player-stats { player: player }))
     (begin
@@ -132,7 +138,7 @@
       true)
     true))
 
-;; Ensure a leaderboard record exists (initialise with zeros if missing)
+;; Ensure a leaderboard record exists; initialise with zeros if missing
 (define-private (ensure-leaderboard (player principal))
   (if (is-none (map-get? leaderboard { player: player }))
     (begin
@@ -164,8 +170,8 @@
     (earned     uint))
   (let ((e (unwrap-panic (map-get? leaderboard { player: player }))))
     (let (
-      (new-streak  (if is-correct (+ (get current-streak e) u1) u0))
-      (new-best    (if (> new-streak (get best-streak e)) new-streak (get best-streak e)))
+      (new-streak (if is-correct (+ (get current-streak e) u1) u0))
+      (new-best   (if (> new-streak (get best-streak e)) new-streak (get best-streak e)))
     )
       (map-set leaderboard { player: player }
         {
@@ -177,17 +183,10 @@
           total-earned:    (+ (get total-earned e) earned)
         }))))
 
-;; Pay out WIT tokens from the contract's reward pool to a player
-(define-private (payout-reward (player principal) (amount uint))
-  (if (>= (var-get reward-pool-balance) amount)
-    (begin
-      (var-set reward-pool-balance (- (var-get reward-pool-balance) amount))
-      (as-contract (contract-call? .wit-token transfer amount tx-sender player none)))
-    ;; Pool is too low — record win but defer payout
-    (ok true)))
+;; (payout logic is inlined directly in reveal-answer so as-contract works correctly)
 
 ;; ============================================================
-;; Public Functions — Admin
+;; Public Functions - Admin
 ;; ============================================================
 
 ;; Add a new trivia question (owner only)
@@ -213,7 +212,7 @@
         })
       (ok new-id))))
 
-;; Retire a question — marks inactive; attempt history is preserved (owner only)
+;; Retire a question - marks inactive; attempt history is preserved (owner only)
 (define-public (retire-question (question-id uint))
   (begin
     (asserts! (is-eq tx-sender contract-owner) err-not-owner)
@@ -224,7 +223,7 @@
       (ok true))))
 
 ;; ============================================================
-;; Public Functions — Reward Pool
+;; Public Functions - Reward Pool
 ;; ============================================================
 
 ;; Fund the reward pool by minting WIT tokens into this contract.
@@ -236,10 +235,11 @@
     (ok (var-get reward-pool-balance))))
 
 ;; ============================================================
-;; Public Functions — Game: Commit-Reveal
+;; Public Functions - Game: Commit-Reveal
 ;; ============================================================
 
-;; STEP 1: Commit — player submits SHA-256 hash of their plaintext answer.
+;; STEP 1: Commit
+;; Player submits SHA-256 hash of their plaintext answer.
 ;; This prevents mempool snooping (front-running).
 (define-public (commit-answer
     (question-id uint)
@@ -258,10 +258,10 @@
       { answer-hash: answer-hash, block-height: block-height })
     (ok true)))
 
-;; STEP 2: Reveal — player submits plaintext answer.
-;; Contract hashes it and compares to the stored commitment.
+;; STEP 2: Reveal
+;; Player submits plaintext answer. Contract hashes it and compares.
 ;; Returns (ok true) if correct, (ok false) if incorrect.
-;; STX (WIT) reward paid only on first correct answer per question per address.
+;; WIT reward paid only on the first correct answer per question per address.
 (define-public (reveal-answer
     (question-id uint)
     (answer      (string-ascii 128)))
@@ -276,7 +276,7 @@
   )
     ;; Question must be active
     (asserts! (get active q) err-question-inactive)
-    ;; Commitment must not have expired
+    ;; Commitment must not be expired
     (asserts!
       (<= block-height (+ (get block-height commitment) commitment-window))
       err-commitment-expired)
@@ -286,19 +286,19 @@
     (ensure-leaderboard tx-sender)
 
     (let (
-      (new-attempt-num (+ (get total-attempts attempt-data) u1))
-      (already-correct (get correct attempt-data))
-      (stats           (unwrap-panic (map-get? player-stats { player: tx-sender })))
-      (current-streak  (get current-streak stats))
+      (new-attempt-num      (+ (get total-attempts attempt-data) u1))
+      (already-correct      (get correct attempt-data))
+      (stats                (unwrap-panic (map-get? player-stats { player: tx-sender })))
+      (current-streak       (get current-streak stats))
       ;; SHA-256 hash of the revealed plaintext answer
-      (revealed-hash   (sha256 answer))
-      ;; Does the hash match the commitment AND the stored question answer?
-      (hash-matches-commitment (is-eq (get answer-hash commitment) revealed-hash))
-      (hash-matches-question   (is-eq (get answer-hash q) revealed-hash))
-      (is-correct              (and hash-matches-commitment hash-matches-question))
+      (revealed-hash        (sha256 answer))
+      ;; Verify commitment hash matches what player just revealed
+      (hash-matches-commit  (is-eq (get answer-hash commitment) revealed-hash))
+      ;; Verify revealed answer matches the stored question answer
+      (is-correct           (and hash-matches-commit (is-eq (get answer-hash q) revealed-hash)))
     )
-      ;; Commitment hash must match revealed answer (anti-tampering)
-      (asserts! hash-matches-commitment err-hash-mismatch)
+      ;; Commitment hash must match revealed answer (anti-tampering check)
+      (asserts! hash-matches-commit err-hash-mismatch)
 
       ;; Remove the used commitment regardless of correctness
       (map-delete commitments { player: tx-sender, question-id: question-id })
@@ -314,16 +314,12 @@
       (let (
         (base-reward  (get reward q))
         (multiplier   (get-streak-multiplier current-streak))
-        (final-reward (if is-correct
-                        (apply-multiplier base-reward multiplier)
-                        u0))
-        (points       (if is-correct
-                        (calc-points base-reward new-attempt-num)
-                        u0))
-        ;; Only pay out if this is the FIRST correct answer for this question per player
-        (earned       (if (and is-correct (not already-correct))
-                        final-reward
-                        u0))
+        ;; Final reward applies streak multiplier (only relevant if correct)
+        (final-reward (if is-correct (apply-multiplier base-reward multiplier) u0))
+        ;; Points = base-reward / attempt-number (full for first try, less for retries)
+        (points       (if is-correct (calc-points base-reward new-attempt-num) u0))
+        ;; Payout only on very first correct answer per question
+        (earned       (if (and is-correct (not already-correct)) final-reward u0))
       )
         ;; Update stats and leaderboard
         (update-player-stats-after-reveal tx-sender is-correct earned)
@@ -331,16 +327,21 @@
 
         ;; Pay WIT reward (first correct attempt only)
         (if (and is-correct (not already-correct))
-          (begin
-            (try! (payout-reward tx-sender final-reward))
-            (ok true))
-          (ok is-correct))))))
+          (let ((player tx-sender))
+            (if (>= (var-get reward-pool-balance) final-reward)
+              (begin
+                (var-set reward-pool-balance (- (var-get reward-pool-balance) final-reward))
+                (try! (as-contract (contract-call? .wit-token transfer final-reward tx-sender player none)))
+                (ok true))
+              ;; Pool too low - win recorded, payout deferred
+              (ok true)))
+          (ok is-correct)))))))
 
 ;; ============================================================
 ;; Read-Only Functions
 ;; ============================================================
 
-;; Get question metadata — NEVER exposes answer-hash to callers
+;; Get question metadata - answer-hash is never returned to callers
 (define-read-only (get-question (question-id uint))
   (match (map-get? questions { question-id: question-id })
     q (ok {
